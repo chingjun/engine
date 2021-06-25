@@ -1709,8 +1709,30 @@ bool Shell::OnServiceProtocolSetAssetBundlePath(
 
   auto asset_manager = std::make_shared<AssetManager>();
 
+  const char* asset_directory = params.at("assetDirectory").data();
+  if (!fml::IsDirectory(fml::UniqueFD{AT_FDCWD}, asset_directory)) {
+    // If the directory does not exist, create it recursively.
+    // Locate the first parent that does not exist.
+    std::string directory = asset_directory;
+    std::vector<std::string> components;
+    fml::UniqueFD directory_fd;
+    do {
+      auto parent = fml::paths::GetDirectoryName(directory);
+      auto component = directory.substr(parent.length() + 1);
+      components.emplace_back(std::move(component));
+      directory = std::move(parent);
+      directory_fd = fml::OpenDirectory(directory.c_str(), false,
+                                        fml::FilePermission::kRead);
+    } while (!fml::IsDirectory(directory_fd));
+
+    std::reverse(components.begin(), components.end());
+
+    fml::CreateDirectory(directory_fd, components,
+                         fml::FilePermission::kReadWrite);
+  }
+
   asset_manager->PushFront(std::make_unique<DirectoryAssetBundle>(
-      fml::OpenDirectory(params.at("assetDirectory").data(), false,
+      fml::OpenDirectory(asset_directory, false,
                          fml::FilePermission::kRead),
       false));
 
